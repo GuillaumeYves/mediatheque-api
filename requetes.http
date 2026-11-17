@@ -1,39 +1,174 @@
 # Requêtes de test (extension REST Client de VS Code).
 # Prérequis : base migrée et seedée (npm run seed), API lancée (npm run dev).
+# Exécuter d'abord les connexions : les jetons sont réutilisés par les requêtes suivantes.
 
 @base = http://localhost:3000
+@biblio = Bearer {{connexionBiblio.response.body.accessToken}}
+@camille = Bearer {{connexionCamille.response.body.accessToken}}
+@noe = Bearer {{connexionNoe.response.body.accessToken}}
 
 ### Santé de l'API et de la base : 200
 GET {{base}}/sante
 
 # =====================================================================
+# Authentification
+# =====================================================================
+
+### Connexion bibliothécaire : 200, deux jetons
+# @name connexionBiblio
+POST {{base}}/api/auth/connexion
+Content-Type: application/json
+
+{
+  "email": "bibliothecaire@example.net",
+  "motDePasse": "Demo-Biblio-2026!"
+}
+
+### Connexion membre Camille : 200
+# @name connexionCamille
+POST {{base}}/api/auth/connexion
+Content-Type: application/json
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "Demo-Camille-2026!"
+}
+
+### Connexion membre Noé : 200
+# @name connexionNoe
+POST {{base}}/api/auth/connexion
+Content-Type: application/json
+
+{
+  "email": "noe@example.net",
+  "motDePasse": "Demo-Noe-2026!"
+}
+
+### Mauvais mot de passe : 401, même réponse qu'un compte inconnu
+POST {{base}}/api/auth/connexion
+Content-Type: application/json
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "mauvais-mot-de-passe"
+}
+
+### Compte inconnu : 401
+POST {{base}}/api/auth/connexion
+Content-Type: application/json
+
+{
+  "email": "personne@example.net",
+  "motDePasse": "mauvais-mot-de-passe"
+}
+
+### Inscription, le rôle envoyé est ignoré : 201 (409 si rejouée)
+POST {{base}}/api/auth/inscription
+Content-Type: application/json
+
+{
+  "email": "lucas@example.net",
+  "motDePasse": "Demo-Lucas-2026!",
+  "role": "bibliothecaire"
+}
+
+### Inscription avec un e-mail existant : 409
+POST {{base}}/api/auth/inscription
+Content-Type: application/json
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "Demo-Camille-2026!"
+}
+
+### Inscription invalide (e-mail, mot de passe trop court) : 400
+POST {{base}}/api/auth/inscription
+Content-Type: application/json
+
+{
+  "email": "pas-un-email",
+  "motDePasse": "court"
+}
+
+### Compte connecté : 200
+GET {{base}}/api/auth/moi
+Authorization: {{camille}}
+
+### Rafraîchissement avec rotation : 200
+# @name rafraichissement
+POST {{base}}/api/auth/rafraichir
+Content-Type: application/json
+
+{
+  "refreshToken": "{{connexionNoe.response.body.refreshToken}}"
+}
+
+### Rejeu de l'ancien refresh token : 401, toute la session de Noé est révoquée
+POST {{base}}/api/auth/rafraichir
+Content-Type: application/json
+
+{
+  "refreshToken": "{{connexionNoe.response.body.refreshToken}}"
+}
+
+### Sans jeton : 401
+GET {{base}}/api/ouvrages
+
+### Jeton invalide : 401
+GET {{base}}/api/ouvrages
+Authorization: Bearer jeton.invalide.signature
+
+# =====================================================================
 # Ouvrages
 # =====================================================================
 
-### Liste paginée : 200
+### Liste paginée (tout compte connecté) : 200
 GET {{base}}/api/ouvrages?page=1&limite=5
+Authorization: {{camille}}
 
 ### Filtre sur la disponibilité : 200
 GET {{base}}/api/ouvrages?disponible=false
+Authorization: {{camille}}
 
-### Limite au-delà du plafond : ramenée à 50
+### Limite au-delà du plafond de 50 : 400
 GET {{base}}/api/ouvrages?limite=500
+Authorization: {{camille}}
 
 ### Filtre invalide : 400
 GET {{base}}/api/ouvrages?disponible=peut-etre
+Authorization: {{camille}}
 
-### Détail avec les emprunts en cours : 200
-GET {{base}}/api/ouvrages/1
+### Détail, un membre ne voit que ses propres emprunts en cours : 200
+GET {{base}}/api/ouvrages/4
+Authorization: {{camille}}
+
+### Détail vu par le bibliothécaire, avec tous les emprunts en cours : 200
+GET {{base}}/api/ouvrages/4
+Authorization: {{biblio}}
 
 ### Identifiant inconnu : 404
 GET {{base}}/api/ouvrages/9999
+Authorization: {{camille}}
 
 ### Identifiant mal formé : 400
 GET {{base}}/api/ouvrages/abc
+Authorization: {{camille}}
 
-### Création : 201
+### Création par un membre : 403
+POST {{base}}/api/ouvrages
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "titre": "Interdit",
+  "auteur": "Membre",
+  "annee": 2000
+}
+
+### Création par le bibliothécaire : 201
 # @name nouvelOuvrage
 POST {{base}}/api/ouvrages
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
@@ -45,6 +180,7 @@ Content-Type: application/json
 
 ### Création invalide, champs fautifs nommés : 400
 POST {{base}}/api/ouvrages
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
@@ -55,6 +191,7 @@ Content-Type: application/json
 
 ### Année dans le futur : 400
 POST {{base}}/api/ouvrages
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
@@ -65,12 +202,14 @@ Content-Type: application/json
 
 ### JSON mal formé : 400
 POST {{base}}/api/ouvrages
+Authorization: {{biblio}}
 Content-Type: application/json
 
 { "titre":
 
 ### Modification partielle : 200
 PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
@@ -79,12 +218,14 @@ Content-Type: application/json
 
 ### Modification vide : 400
 PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {}
 
 ### Modification d'un ouvrage inconnu : 404
 PATCH {{base}}/api/ouvrages/9999
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
@@ -93,109 +234,275 @@ Content-Type: application/json
 
 ### Suppression d'un ouvrage emprunté : 409
 DELETE {{base}}/api/ouvrages/1
+Authorization: {{biblio}}
 
 ### Suppression d'un ouvrage avec un historique d'emprunts : 409
 DELETE {{base}}/api/ouvrages/6
+Authorization: {{biblio}}
 
 ### Suppression : 204
 DELETE {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Authorization: {{biblio}}
 
 ### Suppression d'un ouvrage inconnu : 404
 DELETE {{base}}/api/ouvrages/9999
+Authorization: {{biblio}}
 
 # =====================================================================
 # Emprunts
 # =====================================================================
 
-### Liste paginée : 200
-GET {{base}}/api/emprunts?page=1&limite=10
+### Liste d'un membre, limitée à ses emprunts : 200
+GET {{base}}/api/emprunts
+Authorization: {{camille}}
 
-### Emprunts en cours : 200
+### Liste du bibliothécaire, tous les emprunts : 200
 GET {{base}}/api/emprunts?rendu=false
+Authorization: {{biblio}}
 
 ### Emprunts rendus : 200
 GET {{base}}/api/emprunts?rendu=true
+Authorization: {{biblio}}
 
-### Détail : 200
+### Détail de son propre emprunt : 200
 GET {{base}}/api/emprunts/1
+Authorization: {{camille}}
+
+### Détail de l'emprunt d'un autre membre : 404, comme un emprunt absent
+GET {{base}}/api/emprunts/2
+Authorization: {{camille}}
 
 ### Emprunt inconnu : 404
 GET {{base}}/api/emprunts/9999
+Authorization: {{camille}}
 
-### Création, l'ouvrage devient indisponible : 201
+### Création pour soi, emprunteurId ignoré pour un membre : 201
 # @name nouvelEmprunt
 POST {{base}}/api/emprunts
+Authorization: {{camille}}
 Content-Type: application/json
 
 {
   "ouvrageId": 2,
-  "emprunteur": "Lucas",
+  "emprunteurId": 3,
   "retourPrevuLe": "2030-01-15"
 }
 
 ### Ouvrage déjà emprunté, rien n'est écrit : 409
 POST {{base}}/api/emprunts
+Authorization: {{camille}}
 Content-Type: application/json
 
 {
   "ouvrageId": 2,
-  "emprunteur": "Léa",
   "retourPrevuLe": "2030-01-20"
 }
 
 ### Ouvrage inconnu : 404
 POST {{base}}/api/emprunts
+Authorization: {{camille}}
 Content-Type: application/json
 
 {
   "ouvrageId": 9999,
-  "emprunteur": "Léa",
   "retourPrevuLe": "2030-01-20"
 }
 
-### Données invalides (nom trop court, date non ISO) : 400
+### Données invalides (date non ISO) : 400
 POST {{base}}/api/emprunts
+Authorization: {{camille}}
 Content-Type: application/json
 
 {
   "ouvrageId": 3,
-  "emprunteur": "L",
   "retourPrevuLe": "15/01/2030"
 }
 
 ### Date de retour antérieure à l'emprunt : 400
 POST {{base}}/api/emprunts
+Authorization: {{camille}}
 Content-Type: application/json
 
 {
   "ouvrageId": 3,
-  "emprunteur": "Léa",
   "empruntLe": "2030-01-10",
   "retourPrevuLe": "2030-01-01"
 }
 
-### Modification de la date de retour : 200
-PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+### Emprunt créé par le bibliothécaire pour un membre : 201
+# @name empruntPourNoe
+POST {{base}}/api/emprunts
+Authorization: {{biblio}}
 Content-Type: application/json
 
 {
-  "retourPrevuLe": "2030-02-01T12:00:00Z"
+  "ouvrageId": 3,
+  "emprunteurId": 3,
+  "retourPrevuLe": "2030-01-15"
 }
 
-### Retour, l'ouvrage redevient disponible : 200
+### Prolongation, le propriétaire ne change pas : 200
+PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "retourPrevuLe": "2030-02-01T12:00:00Z",
+  "emprunteurId": 3
+}
+
+### Clôture de l'emprunt d'un autre membre : 404, comme un emprunt absent
+POST {{base}}/api/emprunts/{{empruntPourNoe.response.body.id}}/retour
+Authorization: {{camille}}
+
+### Retour de son emprunt, l'ouvrage redevient disponible : 200
 POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+Authorization: {{camille}}
 
 ### Retour d'un emprunt déjà rendu : 409
 POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+Authorization: {{camille}}
+
+### Retour par le bibliothécaire : 200
+POST {{base}}/api/emprunts/{{empruntPourNoe.response.body.id}}/retour
+Authorization: {{biblio}}
 
 ### Retour d'un emprunt inconnu : 404
 POST {{base}}/api/emprunts/9999/retour
+Authorization: {{biblio}}
 
-### Suppression : 204
+### Suppression par un membre : 403
 DELETE {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: {{camille}}
+
+### Suppression par le bibliothécaire : 204
+DELETE {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: {{biblio}}
 
 ### Suppression d'un emprunt inconnu : 404
 DELETE {{base}}/api/emprunts/9999
+Authorization: {{biblio}}
+
+# =====================================================================
+# Réservations
+# Seed : Camille emprunte l'ouvrage 1, Noé l'a réservé ; Noé emprunte l'ouvrage 4.
+# =====================================================================
+
+### Réservations de Noé : 200, la sienne seulement
+GET {{base}}/api/reservations
+Authorization: {{noe}}
+
+### Toutes les réservations, filtrées sur les actives : 200
+GET {{base}}/api/reservations?statut=active
+Authorization: {{biblio}}
+
+### Réserver un ouvrage emprunté par un autre, membreId ignoré : 201
+# @name reservationCamille
+POST {{base}}/api/reservations
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "ouvrageId": 4,
+  "membreId": 3
+}
+
+### Deuxième réservation active du même ouvrage : 409
+POST {{base}}/api/reservations
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "ouvrageId": 4
+}
+
+### Réserver un ouvrage que l'on emprunte déjà : 409
+POST {{base}}/api/reservations
+Authorization: {{noe}}
+Content-Type: application/json
+
+{
+  "ouvrageId": 4
+}
+
+### Réserver un ouvrage disponible : 409
+POST {{base}}/api/reservations
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "ouvrageId": 9
+}
+
+### Réservation d'un autre membre : 404, comme une réservation absente
+GET {{base}}/api/reservations/{{reservationCamille.response.body.id}}
+Authorization: {{noe}}
+
+### Annulation de sa réservation : 204
+DELETE {{base}}/api/reservations/{{reservationCamille.response.body.id}}
+Authorization: {{camille}}
+
+### Annulation d'une réservation déjà clôturée : 409
+DELETE {{base}}/api/reservations/{{reservationCamille.response.body.id}}
+Authorization: {{camille}}
+
+### Retour d'un ouvrage réservé : 200, empruntSuivant est l'emprunt créé pour Noé
+POST {{base}}/api/emprunts/1/retour
+Authorization: {{camille}}
+
+### La réservation de Noé est honorée : 200
+GET {{base}}/api/reservations?statut=honoree
+Authorization: {{noe}}
+
+# =====================================================================
+# Assistant (réponse en Server-Sent Events)
+# =====================================================================
+
+### Question avec appel d'outil : 200, flux text/event-stream
+POST {{base}}/api/assistant/flux
+Authorization: {{noe}}
+Content-Type: application/json
+
+{
+  "question": "Quels sont mes emprunts ?"
+}
+
+### Recherche dans le catalogue : 200
+POST {{base}}/api/assistant/flux
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "question": "Avez-vous des livres de Zola ?"
+}
+
+### Question vide : 400
+POST {{base}}/api/assistant/flux
+Authorization: {{camille}}
+Content-Type: application/json
+
+{
+  "question": "   "
+}
+
+### Sans jeton : 401
+POST {{base}}/api/assistant/flux
+Content-Type: application/json
+
+{
+  "question": "Bonjour"
+}
+
+### Effacer la conversation : 204
+DELETE {{base}}/api/assistant/memoire
+Authorization: {{noe}}
+
+# =====================================================================
+# Documentation
+# =====================================================================
+
+### Spécification OpenAPI 3.1 : 200
+GET {{base}}/api/docs.json
 
 # =====================================================================
 # Divers
@@ -203,3 +510,11 @@ DELETE {{base}}/api/emprunts/9999
 
 ### Route inconnue : 404
 GET {{base}}/api/inconnu
+
+### Origine non déclarée : 403
+GET {{base}}/sante
+Origin: https://pirate.example.net
+
+### Déconnexion, refresh tokens révoqués : 204
+POST {{base}}/api/auth/deconnexion
+Authorization: {{camille}}

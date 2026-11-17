@@ -1,0 +1,59 @@
+name: mediatheque-api
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: mediatheque_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d mediatheque_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/mediatheque_test
+      CORS_ORIGINS: http://localhost:5173
+      AUTH_RATE_LIMIT_MAX: "1000"
+      GLOBAL_RATE_LIMIT_MAX: "10000"
+      IA_FOURNISSEUR: bouchon
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Secret éphémère, généré à chaque exécution : rien n'est versionné.
+      - name: Generate test secret
+        run: echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+      # Vérifie que l'image de production se construit.
+      - name: Build Docker image
+        run: docker build -t mediatheque-api:ci .

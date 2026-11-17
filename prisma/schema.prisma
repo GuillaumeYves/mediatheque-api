@@ -1,37 +1,112 @@
 generator client {
   provider = "prisma-client"
-  output   = "./generated"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  membre
+  bibliothecaire
+}
+
+enum StatutReservation {
+  active
+  annulee
+  honoree
+}
+
+// Compte de l'API. Le mot de passe n'est jamais stocké en clair.
+model Utilisateur {
+  id              Int              @id @default(autoincrement())
+  email           String           @unique @db.VarChar(254)
+  motDePasseHache String
+  role            Role             @default(membre)
+  creeLe          DateTime         @default(now())
+  emprunts        Emprunt[]
+  reservations    Reservation[]
+  refreshTokens   RefreshToken[]
+  consommationsIa ConsommationIa[]
+}
+
+// Refresh token stocké sous forme d'empreinte SHA-256, révocable.
+model RefreshToken {
+  id            Int         @id @default(autoincrement())
+  empreinte     String      @unique @db.Char(64)
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  utilisateurId Int
+  expireLe      DateTime
+  revoqueLe     DateTime?
+  creeLe        DateTime    @default(now())
+
+  @@index([utilisateurId])
+}
+
 // Ouvrage du catalogue, indisponible tant qu'un emprunt est en cours.
 model Ouvrage {
-  id         Int       @id @default(autoincrement())
-  titre      String    @db.VarChar(150)
-  auteur     String    @db.VarChar(120)
-  annee      Int
-  disponible Boolean   @default(true)
-  creeLe     DateTime  @default(now())
-  modifieLe  DateTime  @updatedAt
-  emprunts   Emprunt[]
+  id           Int           @id @default(autoincrement())
+  titre        String        @db.VarChar(150)
+  auteur       String        @db.VarChar(120)
+  annee        Int
+  disponible   Boolean       @default(true)
+  creeLe       DateTime      @default(now())
+  modifieLe    DateTime      @updatedAt
+  emprunts     Emprunt[]
+  reservations Reservation[]
 
   @@index([disponible])
 }
 
-// Emprunt d'un ouvrage. Restrict empêche de supprimer un ouvrage qui a des emprunts.
+// Emprunt d'un ouvrage par un utilisateur. Restrict protège l'historique.
 model Emprunt {
-  id            Int       @id @default(autoincrement())
-  ouvrage       Ouvrage   @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  id            Int          @id @default(autoincrement())
+  ouvrage       Ouvrage      @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
   ouvrageId     Int
-  emprunteur    String    @db.VarChar(80)
-  empruntLe     DateTime  @default(now())
+  emprunteur    Utilisateur  @relation(fields: [emprunteurId], references: [id], onDelete: Restrict)
+  emprunteurId  Int
+  empruntLe     DateTime     @default(now())
   retourPrevuLe DateTime
-  rendu         Boolean   @default(false)
+  rendu         Boolean      @default(false)
   renduLe       DateTime?
+  reservation   Reservation?
 
   @@index([ouvrageId, rendu])
+  @@index([emprunteurId, rendu])
   @@index([rendu])
+}
+
+// File d'attente sur un ouvrage indisponible : la plus ancienne devient un emprunt au retour.
+model Reservation {
+  id        Int               @id @default(autoincrement())
+  ouvrage   Ouvrage           @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  ouvrageId Int
+  membre    Utilisateur       @relation(fields: [membreId], references: [id], onDelete: Restrict)
+  membreId  Int
+  statut    StatutReservation @default(active)
+  // Vaut true tant que la réservation est active, NULL ensuite.
+  // PostgreSQL considère les NULL comme distincts : l'unicité ne porte que sur les réservations actives.
+  enCours   Boolean?          @default(true)
+  creeLe    DateTime          @default(now())
+  clotureLe DateTime?
+  emprunt   Emprunt?          @relation(fields: [empruntId], references: [id], onDelete: SetNull)
+  empruntId Int?              @unique
+
+  @@unique([ouvrageId, membreId, enCours])
+  @@index([ouvrageId, statut, creeLe])
+  @@index([membreId, statut])
+}
+
+// Jetons consommés par l'assistant, une ligne par réponse : base du quota journalier.
+model ConsommationIa {
+  id            Int         @id @default(autoincrement())
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  utilisateurId Int
+  creeLe        DateTime    @default(now())
+  jetonsEntree  Int
+  jetonsSortie  Int
+
+  @@index([utilisateurId, creeLe])
+  @@map("consommation_ia")
 }
