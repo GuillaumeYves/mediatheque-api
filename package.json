@@ -1,0 +1,35 @@
+{
+  "name": "mediatheque-api",
+  "version": "1.0.0",
+  "description": "REST API for a community media library: catalogue and loans, built with Express 5, Zod and Prisma.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "db:up": "docker compose up -d --wait",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "seed": "prisma db seed",
+    "postinstall": "prisma generate"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.1"
+  },
+  "allowScripts": {
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true
+  }
+}

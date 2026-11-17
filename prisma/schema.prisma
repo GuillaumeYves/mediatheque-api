@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Ouvrage du catalogue, indisponible tant qu'un emprunt est en cours.
+model Ouvrage {
+  id         Int       @id @default(autoincrement())
+  titre      String    @db.VarChar(150)
+  auteur     String    @db.VarChar(120)
+  annee      Int
+  disponible Boolean   @default(true)
+  creeLe     DateTime  @default(now())
+  modifieLe  DateTime  @updatedAt
+  emprunts   Emprunt[]
+
+  @@index([disponible])
+}
+
+// Emprunt d'un ouvrage. Restrict empêche de supprimer un ouvrage qui a des emprunts.
+model Emprunt {
+  id            Int       @id @default(autoincrement())
+  ouvrage       Ouvrage   @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  ouvrageId     Int
+  emprunteur    String    @db.VarChar(80)
+  empruntLe     DateTime  @default(now())
+  retourPrevuLe DateTime
+  rendu         Boolean   @default(false)
+  renduLe       DateTime?
+
+  @@index([ouvrageId, rendu])
+  @@index([rendu])
+}

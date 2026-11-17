@@ -1,0 +1,205 @@
+# Requêtes de test (extension REST Client de VS Code).
+# Prérequis : base migrée et seedée (npm run seed), API lancée (npm run dev).
+
+@base = http://localhost:3000
+
+### Santé de l'API et de la base : 200
+GET {{base}}/sante
+
+# =====================================================================
+# Ouvrages
+# =====================================================================
+
+### Liste paginée : 200
+GET {{base}}/api/ouvrages?page=1&limite=5
+
+### Filtre sur la disponibilité : 200
+GET {{base}}/api/ouvrages?disponible=false
+
+### Limite au-delà du plafond de 50 : 400
+GET {{base}}/api/ouvrages?limite=500
+
+### Filtre invalide : 400
+GET {{base}}/api/ouvrages?disponible=peut-etre
+
+### Détail avec les emprunts en cours : 200
+GET {{base}}/api/ouvrages/1
+
+### Identifiant inconnu : 404
+GET {{base}}/api/ouvrages/9999
+
+### Identifiant mal formé : 400
+GET {{base}}/api/ouvrages/abc
+
+### Création : 201
+# @name nouvelOuvrage
+POST {{base}}/api/ouvrages
+Content-Type: application/json
+
+{
+  "titre": "Notre-Dame de Paris",
+  "auteur": "Victor Hugo",
+  "annee": 1831,
+  "champInconnu": "ignoré"
+}
+
+### Création invalide, champs fautifs nommés : 400
+POST {{base}}/api/ouvrages
+Content-Type: application/json
+
+{
+  "titre": "",
+  "auteur": "Anonyme",
+  "annee": 1200
+}
+
+### Année dans le futur : 400
+POST {{base}}/api/ouvrages
+Content-Type: application/json
+
+{
+  "titre": "Livre du futur",
+  "auteur": "Anonyme",
+  "annee": 3000
+}
+
+### JSON mal formé : 400
+POST {{base}}/api/ouvrages
+Content-Type: application/json
+
+{ "titre":
+
+### Modification partielle : 200
+PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Content-Type: application/json
+
+{
+  "annee": 1832
+}
+
+### Modification vide : 400
+PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Content-Type: application/json
+
+{}
+
+### Modification d'un ouvrage inconnu : 404
+PATCH {{base}}/api/ouvrages/9999
+Content-Type: application/json
+
+{
+  "annee": 1900
+}
+
+### Suppression d'un ouvrage emprunté : 409
+DELETE {{base}}/api/ouvrages/1
+
+### Suppression d'un ouvrage avec un historique d'emprunts : 409
+DELETE {{base}}/api/ouvrages/6
+
+### Suppression : 204
+DELETE {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+
+### Suppression d'un ouvrage inconnu : 404
+DELETE {{base}}/api/ouvrages/9999
+
+# =====================================================================
+# Emprunts
+# =====================================================================
+
+### Liste paginée : 200
+GET {{base}}/api/emprunts?page=1&limite=10
+
+### Emprunts en cours : 200
+GET {{base}}/api/emprunts?rendu=false
+
+### Emprunts rendus : 200
+GET {{base}}/api/emprunts?rendu=true
+
+### Détail : 200
+GET {{base}}/api/emprunts/1
+
+### Emprunt inconnu : 404
+GET {{base}}/api/emprunts/9999
+
+### Création, l'ouvrage devient indisponible : 201
+# @name nouvelEmprunt
+POST {{base}}/api/emprunts
+Content-Type: application/json
+
+{
+  "ouvrageId": 2,
+  "emprunteur": "Lucas",
+  "retourPrevuLe": "2030-01-15"
+}
+
+### Ouvrage déjà emprunté, rien n'est écrit : 409
+POST {{base}}/api/emprunts
+Content-Type: application/json
+
+{
+  "ouvrageId": 2,
+  "emprunteur": "Léa",
+  "retourPrevuLe": "2030-01-20"
+}
+
+### Ouvrage inconnu : 404
+POST {{base}}/api/emprunts
+Content-Type: application/json
+
+{
+  "ouvrageId": 9999,
+  "emprunteur": "Léa",
+  "retourPrevuLe": "2030-01-20"
+}
+
+### Données invalides (nom trop court, date non ISO) : 400
+POST {{base}}/api/emprunts
+Content-Type: application/json
+
+{
+  "ouvrageId": 3,
+  "emprunteur": "L",
+  "retourPrevuLe": "15/01/2030"
+}
+
+### Date de retour antérieure à l'emprunt : 400
+POST {{base}}/api/emprunts
+Content-Type: application/json
+
+{
+  "ouvrageId": 3,
+  "emprunteur": "Léa",
+  "empruntLe": "2030-01-10",
+  "retourPrevuLe": "2030-01-01"
+}
+
+### Modification de la date de retour : 200
+PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Content-Type: application/json
+
+{
+  "retourPrevuLe": "2030-02-01T12:00:00Z"
+}
+
+### Retour, l'ouvrage redevient disponible : 200
+POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+
+### Retour d'un emprunt déjà rendu : 409
+POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+
+### Retour d'un emprunt inconnu : 404
+POST {{base}}/api/emprunts/9999/retour
+
+### Suppression : 204
+DELETE {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+
+### Suppression d'un emprunt inconnu : 404
+DELETE {{base}}/api/emprunts/9999
+
+# =====================================================================
+# Divers
+# =====================================================================
+
+### Route inconnue : 404
+GET {{base}}/api/inconnu
