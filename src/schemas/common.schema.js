@@ -10,10 +10,16 @@ const MAX_INT = 2_147_483_647;
 export const idSchema = z.coerce.number().int().positive().max(MAX_INT);
 export const idParamsSchema = z.object({ id: idSchema });
 
-// Pagination commune : ?page= et ?limite=, limite plafonnée.
+// Pagination commune : ?page= et ?limite=. Une limite trop grande est ramenée au plafond,
+// comme le demande la consigne, au lieu d'être refusée.
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limite: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(10),
+  limite: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .overwrite((value) => Math.min(value, MAX_PAGE_SIZE))
+    .default(10),
 });
 
 // Date ISO 8601, jour seul ou date et heure, convertie en Date.

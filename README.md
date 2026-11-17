@@ -61,7 +61,9 @@ Le fichier `.env` n'est jamais versionné. `.env.example` ne contient que des va
 
 ## Routes
 
-Toutes les réponses sont en JSON. Les listes sont paginées avec `?page=` (défaut 1) et `?limite=` (défaut 10, 50 au plus).
+Toutes les réponses sont en JSON. Les listes sont paginées avec `?page=` (défaut 1) et `?limite=` (défaut 10).
+Une limite supérieure à 50 est ramenée à 50 plutôt que refusée ; le champ `limite` de la réponse indique
+la valeur appliquée. Une limite nulle, négative ou non numérique est refusée en 400.
 
 ```json
 { "donnees": [], "page": 1, "limite": 10, "total": 42, "pages": 5 }

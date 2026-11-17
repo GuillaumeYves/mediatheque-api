@@ -16,7 +16,7 @@ GET {{base}}/api/ouvrages?page=1&limite=5
 ### Filtre sur la disponibilité : 200
 GET {{base}}/api/ouvrages?disponible=false
 
-### Limite au-delà du plafond de 50 : 400
+### Limite au-delà du plafond : ramenée à 50
 GET {{base}}/api/ouvrages?limite=500
 
 ### Filtre invalide : 400
